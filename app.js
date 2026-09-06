@@ -71,11 +71,9 @@ function renderUI() {
         totalCount++;
         if (data.status === '済') doneCount++;
 
-        // 投票区の数字抽出（例: 第15投票区 -> 15）
         const dNum = data.voteDistrict.match(/\d+/) ? data.voteDistrict.match(/\d+/)[0] : '';
         const label = `${dNum}-${data.posterNum}`;
 
-        // 赤/緑カスタムピンの生成
         const customIcon = L.divIcon({
             className: `custom-icon ${data.status === '済' ? 'pin-done' : 'pin-un'}`,
             html: label,
@@ -94,21 +92,29 @@ function renderUI() {
             updateMarkerPopup(markers[data.id], data.id, data.status);
         }
 
-        // マップ下の簡易リスト
+        const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${data.coords[0]},${data.coords[1]}`;
+
+        // マップ下の簡易リスト（チェックボックス・個別ナビ・始点ボタン・切替・メモ欄を完備）
         if (locationList) {
             const item = document.createElement('div');
             item.style.cssText = 'padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;';
             item.innerHTML = `
-                <div style="flex:1; margin-right:10px;">
-                    <b>[${data.voteDistrict}] No.${data.posterNum} ${data.name}</b><br>
-                    <small style="color:#666;">${data.address}</small>
-                    <div style="margin-top:4px;">
-                        <input type="text" value="${data.note}" placeholder="現場メモ..." onchange="saveNote('${data.id}', this.value)" style="width:100%; padding:4px; font-size:12px; border:1px solid #ccc; border-radius:3px;">
+                <div style="display:flex; align-items:flex-start; gap:8px; flex:1; margin-right:8px;">
+                    <input type="checkbox" class="nav-checkbox" value="${data.id}" style="margin-top:4px;">
+                    <div style="flex:1;">
+                        <b>[${data.voteDistrict}] No.${data.posterNum} ${data.name}</b><br>
+                        <small style="color:#666;">${data.address}</small>
+                        <div style="margin-top:4px;">
+                            <input type="text" value="${data.note}" placeholder="現場メモ..." onchange="saveNote('${data.id}', this.value)" style="width:100%; padding:3px 4px; font-size:12px; border:1px solid #ccc; border-radius:3px;">
+                        </div>
                     </div>
                 </div>
-                <div style="text-align:right; min-width:70px;">
-                    <span class="status-badge ${data.status === '済' ? 'status-done' : 'status-un'}">${data.status}</span><br>
-                    <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')" style="margin-top:6px; padding:3px 8px; font-size:11px;">切替</button>
+                <div style="text-align:right; display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+                    <span class="status-badge ${data.status === '済' ? 'status-done' : 'status-un'}">${data.status}</span>
+                    <div style="display:flex; gap:4px; margin-top:2px;">
+                        <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')" style="padding:2px 6px; font-size:11px;">切替</button>
+                        <a href="${navUrl}" target="_blank" class="btn-nav" style="padding:2px 6px; font-size:11px;">ナビ</a>
+                    </div>
                 </div>
             `;
             locationList.appendChild(item);
@@ -118,17 +124,18 @@ function renderUI() {
         if (tableBody) {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td><input type="checkbox" value="${data.id}"></td>
+                <td><input type="checkbox" class="nav-checkbox" value="${data.id}"></td>
                 <td>${data.posterNum}</td>
                 <td>${data.voteDistrict}</td>
                 <td>${data.name}</td>
                 <td>${data.address}</td>
                 <td><span class="status-badge ${data.status === '済' ? 'status-done' : 'status-un'}">${data.status}</span></td>
                 <td>
-                    <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')">切替</button>
+                    <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')" style="margin-bottom:2px;">切替</button>
+                    <a href="${navUrl}" target="_blank" class="btn-nav" style="padding:2px 6px; font-size:11px;">ナビ</a>
                 </td>
                 <td>
-                    <input type="text" value="${data.note}" placeholder="メモ..." onchange="saveNote('${data.id}', this.value)" style="width:100%; min-width:120px; padding:4px; font-size:12px; border:1px solid #ccc; border-radius:3px;">
+                    <input type="text" value="${data.note}" placeholder="メモ..." onchange="saveNote('${data.id}', this.value)" style="width:100%; min-width:110px; padding:3px; font-size:12px; border:1px solid #ccc; border-radius:3px;">
                 </td>
             `;
             tableBody.appendChild(tr);
@@ -180,6 +187,28 @@ function saveNote(id, text) {
     savedNotes[id] = text;
     localStorage.setItem(noteStorageKey, JSON.stringify(savedNotes));
     renderUI();
+}
+
+function startBatchNavigation() {
+    const checkboxes = document.querySelectorAll('.nav-checkbox:checked');
+    if (checkboxes.length === 0) {
+        alert('ナビ巡回したい地点のチェックボックスを選択してください。');
+        return;
+    }
+
+    const selectedCoords = Array.from(checkboxes).map(cb => {
+        const id = cb.value;
+        return locationData[id].coords.join(',');
+    });
+
+    const destination = selectedCoords.pop();
+    const waypoints = selectedCoords.join('|');
+    
+    let url = `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
+    if (waypoints.length > 0) {
+        url += `&waypoints=${waypoints}`;
+    }
+    window.open(url, '_blank');
 }
 
 function switchView(view) {
