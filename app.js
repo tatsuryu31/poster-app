@@ -1,8 +1,20 @@
+// Firebase 初期化設定
+const firebaseConfig = {
+  apiKey: "AIzaSyCDdyYbnzbqS6PWDTwakQWbzR22fU1xu_I",
+  authDomain: "poster-app-3e0ba.firebaseapp.com",
+  databaseURL: "https://poster-app-3e0ba-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "poster-app-3e0ba",
+  storageBucket: "poster-app-3e0ba.firebasestorage.app",
+  messagingSenderId: "386817493362",
+  appId: "1:386817493362:web:8a193d700d8971b37d35eb"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
 let locationData = {};
 let map;
 let markers = {};
-const storageKey = 'posterStatusBackup';
-const noteStorageKey = 'posterNotesBackup';
 
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
@@ -21,7 +33,8 @@ function loadCSV() {
         .then(response => response.text())
         .then(data => {
             parseCSV(data);
-            renderUI();
+            // CSV解析後、Firebaseのリアルタイム監視を開始
+            listenToFirebase();
         })
         .catch(err => {
             console.error('CSV読み込みエラー:', err);
@@ -32,29 +45,43 @@ function loadCSV() {
 
 function parseCSV(csvText) {
     const lines = csvText.trim().split('\n');
-    const savedStatus = JSON.parse(localStorage.getItem(storageKey)) || {};
-    const savedNotes = JSON.parse(localStorage.getItem(noteStorageKey)) || {};
 
     for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',');
         if (cols.length >= 8) {
             const id = cols[0].trim();
-            const defaultStatus = cols[5].trim();
-            const currentStatus = savedStatus[id] || defaultStatus;
-            const currentNote = savedNotes[id] || '';
-
             locationData[id] = {
                 id: id,
                 voteDistrict: cols[1].trim(),
                 posterNum: cols[2].trim(),
                 address: cols[3].trim(),
                 name: cols[4].trim(),
-                status: currentStatus,
-                note: currentNote,
+                status: cols[5].trim(),
+                note: '',
                 coords: [parseFloat(cols[6]), parseFloat(cols[7])]
             };
         }
     }
+}
+
+// Firebaseからのリアルタイムデータ受信・自動同期
+function listenToFirebase() {
+    db.ref('posters').on('value', (snapshot) => {
+        const remoteData = snapshot.val() || {};
+        
+        Object.keys(locationData).forEach(id => {
+            if (remoteData[id]) {
+                if (remoteData[id].status !== undefined) {
+                    locationData[id].status = remoteData[id].status;
+                }
+                if (remoteData[id].note !== undefined) {
+                    locationData[id].note = remoteData[id].note;
+                }
+            }
+        });
+
+        renderUI();
+    });
 }
 
 function renderUI() {
@@ -94,7 +121,7 @@ function renderUI() {
 
         const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${data.coords[0]},${data.coords[1]}`;
 
-        // マップ下の簡易リスト（チェックボックス・個別ナビ・始点ボタン・切替・メモ欄を完備）
+        // マップ下の簡易リスト
         if (locationList) {
             const item = document.createElement('div');
             item.style.cssText = 'padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;';
@@ -173,20 +200,14 @@ function toggleStatus(id) {
     const nextStatus = data.status === '済' ? '未' : '済';
     
     if (confirm(`[${data.name}] のステータスを「${nextStatus}」に変更しますか？`)) {
-        data.status = nextStatus;
-        const savedStatus = JSON.parse(localStorage.getItem(storageKey)) || {};
-        savedStatus[id] = data.status;
-        localStorage.setItem(storageKey, JSON.stringify(savedStatus));
-        renderUI();
+        // Firebase クラウドへ送信
+        db.ref(`posters/${id}/status`).set(nextStatus);
     }
 }
 
 function saveNote(id, text) {
-    locationData[id].note = text;
-    const savedNotes = JSON.parse(localStorage.getItem(noteStorageKey)) || {};
-    savedNotes[id] = text;
-    localStorage.setItem(noteStorageKey, JSON.stringify(savedNotes));
-    renderUI();
+    // Firebase クラウドへ送信
+    db.ref(`posters/${id}/note`).set(text);
 }
 
 function startBatchNavigation() {
