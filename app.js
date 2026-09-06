@@ -75,7 +75,7 @@ function renderUI() {
         const dNum = data.voteDistrict.match(/\d+/) ? data.voteDistrict.match(/\d+/)[0] : '';
         const label = `${dNum}-${data.posterNum}`;
 
-        // カスタムピン（赤/緑 & ラベル表示）の作成・更新
+        // 赤/緑カスタムピンの生成
         const customIcon = L.divIcon({
             className: `custom-icon ${data.status === '済' ? 'pin-done' : 'pin-un'}`,
             html: label,
@@ -125,10 +125,10 @@ function renderUI() {
                 <td>${data.address}</td>
                 <td><span class="status-badge ${data.status === '済' ? 'status-done' : 'status-un'}">${data.status}</span></td>
                 <td>
-                    <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')" style="margin-bottom:4px;">切替</button>
+                    <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')">切替</button>
                 </td>
                 <td>
-                    <input type="text" value="${data.note}" placeholder="メモ..." onchange="saveNote('${data.id}', this.value)" style="width:100%; min-width:100px; padding:3px; font-size:12px;">
+                    <input type="text" value="${data.note}" placeholder="メモ..." onchange="saveNote('${data.id}', this.value)" style="width:100%; min-width:120px; padding:4px; font-size:12px; border:1px solid #ccc; border-radius:3px;">
                 </td>
             `;
             tableBody.appendChild(tr);
