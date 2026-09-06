@@ -1,0 +1,8 @@
+{
+  "name": "西城ポスター掲示管理",
+  "short_name": "西城ポスター",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#007bff",
+  "theme_color": "#007bff"
+}
