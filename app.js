@@ -71,10 +71,23 @@ function renderUI() {
         totalCount++;
         if (data.status === '済') doneCount++;
 
-        // マップピン
+        // 投票区の数字抽出（例: 第15投票区 -> 15）
+        const dNum = data.voteDistrict.match(/\d+/) ? data.voteDistrict.match(/\d+/)[0] : '';
+        const label = `${dNum}-${data.posterNum}`;
+
+        // カスタムピン（赤/緑 & ラベル表示）の作成・更新
+        const customIcon = L.divIcon({
+            className: `custom-icon ${data.status === '済' ? 'pin-done' : 'pin-un'}`,
+            html: label,
+            iconSize: [38, 20],
+            iconAnchor: [19, 10]
+        });
+
         if (!markers[data.id] && !isNaN(data.coords[0])) {
-            const marker = L.marker(data.coords).addTo(map);
+            const marker = L.marker(data.coords, { icon: customIcon }).addTo(map);
             markers[data.id] = marker;
+        } else if (markers[data.id]) {
+            markers[data.id].setIcon(customIcon);
         }
         
         if (markers[data.id]) {
@@ -112,7 +125,10 @@ function renderUI() {
                 <td>${data.address}</td>
                 <td><span class="status-badge ${data.status === '済' ? 'status-done' : 'status-un'}">${data.status}</span></td>
                 <td>
-                    <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')">切替</button>
+                    <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')" style="margin-bottom:4px;">切替</button>
+                </td>
+                <td>
+                    <input type="text" value="${data.note}" placeholder="メモ..." onchange="saveNote('${data.id}', this.value)" style="width:100%; min-width:100px; padding:3px; font-size:12px;">
                 </td>
             `;
             tableBody.appendChild(tr);
@@ -163,6 +179,7 @@ function saveNote(id, text) {
     const savedNotes = JSON.parse(localStorage.getItem(noteStorageKey)) || {};
     savedNotes[id] = text;
     localStorage.setItem(noteStorageKey, JSON.stringify(savedNotes));
+    renderUI();
 }
 
 function switchView(view) {
