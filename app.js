@@ -15,6 +15,7 @@ const db = firebase.database();
 let locationData = {};
 let map;
 let markers = {};
+let selectedDistricts = new Set();
 
 document.addEventListener('DOMContentLoaded', () => {
     initMap();
@@ -33,7 +34,7 @@ function loadCSV() {
         .then(response => response.text())
         .then(data => {
             parseCSV(data);
-            // CSV解析後、Firebaseのリアルタイム監視を開始
+            generateDistrictCheckboxes();
             listenToFirebase();
         })
         .catch(err => {
@@ -56,7 +57,7 @@ function parseCSV(csvText) {
                 posterNum: cols[2].trim(),
                 address: cols[3].trim(),
                 name: cols[4].trim(),
-                status: cols[5].trim(),
+                status: cols[5].trim(), // "未" または "済" / "完了" など
                 note: '',
                 coords: [parseFloat(cols[6]), parseFloat(cols[7])]
             };
@@ -64,7 +65,55 @@ function parseCSV(csvText) {
     }
 }
 
-// Firebaseからのリアルタイムデータ受信・自動同期
+// 投票区チェックボックスの動的生成
+function generateDistrictCheckboxes() {
+    const container = document.getElementById('district-checkboxes');
+    if (!container) return;
+
+    const districts = Array.from(new Set(Object.values(locationData).map(d => d.voteDistrict)))
+        .sort((a, b) => {
+            const numA = parseInt(a.match(/\d+/)?.[0] || 0);
+            const numB = parseInt(b.match(/\d+/)?.[0] || 0);
+            return numA - numB;
+        });
+
+    selectedDistricts = new Set(districts); // 初期状態は全選択
+
+    let html = `<label style="font-weight:bold; margin-right:5px;"><input type="checkbox" id="toggle-all-districts" checked onchange="toggleAllDistricts(this.checked)"> 全選択/解除</label> | `;
+    
+    districts.forEach(d => {
+        html += `<label><input type="checkbox" class="district-filter" value="${d}" checked onchange="onDistrictChange()"> ${d}</label> `;
+    });
+
+    container.innerHTML = html;
+}
+
+function toggleAllDistricts(checked) {
+    const checkboxes = document.querySelectorAll('.district-filter');
+    selectedDistricts.clear();
+    checkboxes.forEach(cb => {
+        cb.checked = checked;
+        if (checked) selectedDistricts.add(cb.value);
+    });
+    applyFilters();
+}
+
+function onDistrictChange() {
+    const checkboxes = document.querySelectorAll('.district-filter');
+    selectedDistricts.clear();
+    let allChecked = true;
+    checkboxes.forEach(cb => {
+        if (cb.checked) {
+            selectedDistricts.add(cb.value);
+        } else {
+            allChecked = false;
+        }
+    });
+    const toggleAll = document.getElementById('toggle-all-districts');
+    if (toggleAll) toggleAll.checked = allChecked;
+    applyFilters();
+}
+
 function listenToFirebase() {
     db.ref('posters').on('value', (snapshot) => {
         const remoteData = snapshot.val() || {};
@@ -80,29 +129,58 @@ function listenToFirebase() {
             }
         });
 
-        renderUI();
+        applyFilters();
     });
 }
 
-function renderUI() {
+function applyFilters() {
+    const searchVal = document.getElementById('search-box')?.value.toLowerCase().trim() || '';
+    const statusVal = document.getElementById('status-filter')?.value || 'all';
+
+    const filteredData = Object.values(locationData).filter(item => {
+        // 1. 検索ワード判定
+        const matchesSearch = !searchVal || 
+            item.posterNum.toString().includes(searchVal) ||
+            item.name.toLowerCase().includes(searchVal) ||
+            item.address.toLowerCase().includes(searchVal) ||
+            item.voteDistrict.toLowerCase().includes(searchVal);
+
+        // 2. ステータス判定 ("済"/"完了" と "未")
+        const isDone = (item.status === '済' || item.status === '完了' || item.status === '掲示済');
+        let matchesStatus = true;
+        if (statusVal === 'un') matchesStatus = !isDone;
+        if (statusVal === 'done') matchesStatus = isDone;
+
+        // 3. 投票区判定
+        const matchesDistrict = selectedDistricts.has(item.voteDistrict);
+
+        return matchesSearch && matchesStatus && matchesDistrict;
+    });
+
+    renderUI(filteredData);
+}
+
+function renderUI(filteredList) {
     const tableBody = document.getElementById('table-body');
     const locationList = document.getElementById('location-list');
     
     if (tableBody) tableBody.innerHTML = '';
     if (locationList) locationList.innerHTML = '';
 
+    // 非表示になったマーカーを非表示、該当するものを表示
+    const filteredIds = new Set(filteredList.map(item => item.id));
+
     let doneCount = 0;
-    let totalCount = 0;
+    let totalCount = filteredList.length;
 
+    // マーカーの更新と表示制御
     Object.values(locationData).forEach(data => {
-        totalCount++;
-        if (data.status === '済') doneCount++;
-
         const dNum = data.voteDistrict.match(/\d+/) ? data.voteDistrict.match(/\d+/)[0] : '';
         const label = `${dNum}-${data.posterNum}`;
+        const isDone = (data.status === '済' || data.status === '完了' || data.status === '掲示済');
 
         const customIcon = L.divIcon({
-            className: `custom-icon ${data.status === '済' ? 'pin-done' : 'pin-un'}`,
+            className: `custom-icon ${isDone ? 'pin-done' : 'pin-un'}`,
             html: label,
             iconSize: [38, 20],
             iconAnchor: [19, 10]
@@ -114,10 +192,23 @@ function renderUI() {
         } else if (markers[data.id]) {
             markers[data.id].setIcon(customIcon);
         }
-        
+
         if (markers[data.id]) {
             updateMarkerPopup(markers[data.id], data.id, data.status);
+
+            // フィルター結果に含まれていればマップ表示、なければ非表示
+            if (filteredIds.has(data.id)) {
+                map.addLayer(markers[data.id]);
+            } else {
+                map.removeLayer(markers[data.id]);
+            }
         }
+    });
+
+    // リスト描画
+    filteredList.forEach(data => {
+        const isDone = (data.status === '済' || data.status === '完了' || data.status === '掲示済');
+        if (isDone) doneCount++;
 
         const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${data.coords[0]},${data.coords[1]}`;
 
@@ -137,7 +228,7 @@ function renderUI() {
                     </div>
                 </div>
                 <div style="text-align:right; display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
-                    <span class="status-badge ${data.status === '済' ? 'status-done' : 'status-un'}">${data.status}</span>
+                    <span class="status-badge ${isDone ? 'status-done' : 'status-un'}">${data.status}</span>
                     <div style="display:flex; gap:4px; margin-top:2px;">
                         <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')" style="padding:2px 6px; font-size:11px;">切替</button>
                         <a href="${navUrl}" target="_blank" class="btn-nav" style="padding:2px 6px; font-size:11px;">ナビ</a>
@@ -156,7 +247,7 @@ function renderUI() {
                 <td>${data.voteDistrict}</td>
                 <td>${data.name}</td>
                 <td>${data.address}</td>
-                <td><span class="status-badge ${data.status === '済' ? 'status-done' : 'status-un'}">${data.status}</span></td>
+                <td><span class="status-badge ${isDone ? 'status-done' : 'status-un'}">${data.status}</span></td>
                 <td>
                     <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')" style="margin-bottom:2px;">切替</button>
                     <a href="${navUrl}" target="_blank" class="btn-nav" style="padding:2px 6px; font-size:11px;">ナビ</a>
@@ -178,13 +269,14 @@ function renderUI() {
 
 function updateMarkerPopup(marker, id, status) {
     const data = locationData[id];
+    const isDone = (status === '済' || status === '完了' || status === '掲示済');
     const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${data.coords[0]},${data.coords[1]}`;
     const content = `
         <div style="font-size:14px; min-width:180px;">
             <b>[${data.voteDistrict}] No.${data.posterNum} ${data.name}</b><br>
             <small>${data.address}</small><br>
             <div style="margin-top:8px;">
-                <button onclick="toggleStatus('${id}')" style="padding:4px 8px;">${status === '済' ? '未に戻す' : '完了にする'}</button>
+                <button onclick="toggleStatus('${id}')" style="padding:4px 8px;">${isDone ? '未に戻す' : '完了にする'}</button>
                 <a href="${navUrl}" target="_blank" class="btn-nav" style="margin-left:5px;">ナビ</a>
             </div>
             <div style="margin-top:6px;">
@@ -197,16 +289,15 @@ function updateMarkerPopup(marker, id, status) {
 
 function toggleStatus(id) {
     const data = locationData[id];
-    const nextStatus = data.status === '済' ? '未' : '済';
+    const isDone = (data.status === '済' || data.status === '完了' || data.status === '掲示済');
+    const nextStatus = isDone ? '未' : '済';
     
     if (confirm(`[${data.name}] のステータスを「${nextStatus}」に変更しますか？`)) {
-        // Firebase クラウドへ送信
         db.ref(`posters/${id}/status`).set(nextStatus);
     }
 }
 
 function saveNote(id, text) {
-    // Firebase クラウドへ送信
     db.ref(`posters/${id}/note`).set(text);
 }
 
