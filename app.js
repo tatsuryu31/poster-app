@@ -57,7 +57,7 @@ function parseCSV(csvText) {
                 posterNum: cols[2].trim(),
                 address: cols[3].trim(),
                 name: cols[4].trim(),
-                status: cols[5].trim(), // "未" または "済" / "完了" など
+                status: cols[5].trim(),
                 note: '',
                 coords: [parseFloat(cols[6]), parseFloat(cols[7])]
             };
@@ -65,7 +65,6 @@ function parseCSV(csvText) {
     }
 }
 
-// 投票区チェックボックスの動的生成
 function generateDistrictCheckboxes() {
     const container = document.getElementById('district-checkboxes');
     if (!container) return;
@@ -77,12 +76,14 @@ function generateDistrictCheckboxes() {
             return numA - numB;
         });
 
-    selectedDistricts = new Set(districts); // 初期状態は全選択
+    selectedDistricts = new Set(districts);
 
-    let html = `<label style="font-weight:bold; margin-right:5px;"><input type="checkbox" id="toggle-all-districts" checked onchange="toggleAllDistricts(this.checked)"> 全選択/解除</label> | `;
+    let html = `<label style="font-weight:bold;"><input type="checkbox" id="toggle-all-districts" checked onchange="toggleAllDistricts(this.checked)"> 全選択</label>`;
     
     districts.forEach(d => {
-        html += `<label><input type="checkbox" class="district-filter" value="${d}" checked onchange="onDistrictChange()"> ${d}</label> `;
+        // ラベル表示は「第2投票区」→「第2」に簡略化して省スペース化
+        const shortLabel = d.replace('投票区', '');
+        html += `<label><input type="checkbox" class="district-filter" value="${d}" checked onchange="onDistrictChange()"> ${shortLabel}</label>`;
     });
 
     container.innerHTML = html;
@@ -138,20 +139,17 @@ function applyFilters() {
     const statusVal = document.getElementById('status-filter')?.value || 'all';
 
     const filteredData = Object.values(locationData).filter(item => {
-        // 1. 検索ワード判定
         const matchesSearch = !searchVal || 
             item.posterNum.toString().includes(searchVal) ||
             item.name.toLowerCase().includes(searchVal) ||
             item.address.toLowerCase().includes(searchVal) ||
             item.voteDistrict.toLowerCase().includes(searchVal);
 
-        // 2. ステータス判定 ("済"/"完了" と "未")
         const isDone = (item.status === '済' || item.status === '完了' || item.status === '掲示済');
         let matchesStatus = true;
         if (statusVal === 'un') matchesStatus = !isDone;
         if (statusVal === 'done') matchesStatus = isDone;
 
-        // 3. 投票区判定
         const matchesDistrict = selectedDistricts.has(item.voteDistrict);
 
         return matchesSearch && matchesStatus && matchesDistrict;
@@ -167,13 +165,11 @@ function renderUI(filteredList) {
     if (tableBody) tableBody.innerHTML = '';
     if (locationList) locationList.innerHTML = '';
 
-    // 非表示になったマーカーを非表示、該当するものを表示
     const filteredIds = new Set(filteredList.map(item => item.id));
 
     let doneCount = 0;
     let totalCount = filteredList.length;
 
-    // マーカーの更新と表示制御
     Object.values(locationData).forEach(data => {
         const dNum = data.voteDistrict.match(/\d+/) ? data.voteDistrict.match(/\d+/)[0] : '';
         const label = `${dNum}-${data.posterNum}`;
@@ -196,7 +192,6 @@ function renderUI(filteredList) {
         if (markers[data.id]) {
             updateMarkerPopup(markers[data.id], data.id, data.status);
 
-            // フィルター結果に含まれていればマップ表示、なければ非表示
             if (filteredIds.has(data.id)) {
                 map.addLayer(markers[data.id]);
             } else {
@@ -205,55 +200,57 @@ function renderUI(filteredList) {
         }
     });
 
-    // リスト描画
     filteredList.forEach(data => {
         const isDone = (data.status === '済' || data.status === '完了' || data.status === '掲示済');
         if (isDone) doneCount++;
 
         const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${data.coords[0]},${data.coords[1]}`;
+        const shortDistrict = data.voteDistrict.replace('投票区', ''); // 明細用の「第2」表記
 
         // マップ下の簡易リスト
         if (locationList) {
             const item = document.createElement('div');
-            item.style.cssText = 'padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;';
+            item.style.cssText = 'padding:8px 4px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;';
             item.innerHTML = `
-                <div style="display:flex; align-items:flex-start; gap:8px; flex:1; margin-right:8px;">
-                    <input type="checkbox" class="nav-checkbox" value="${data.id}" style="margin-top:4px;">
+                <div style="display:flex; align-items:flex-start; gap:6px; flex:1; margin-right:6px;">
+                    <input type="checkbox" class="nav-checkbox" value="${data.id}" style="margin-top:3px;">
                     <div style="flex:1;">
-                        <b>[${data.voteDistrict}] No.${data.posterNum} ${data.name}</b><br>
-                        <small style="color:#666;">${data.address}</small>
-                        <div style="margin-top:4px;">
-                            <input type="text" value="${data.note}" placeholder="現場メモ..." onchange="saveNote('${data.id}', this.value)" style="width:100%; padding:3px 4px; font-size:12px; border:1px solid #ccc; border-radius:3px;">
+                        <b style="font-size:13px;">[${data.voteDistrict}] No.${data.posterNum} ${data.name}</b><br>
+                        <small style="color:#666; font-size:11px;">${data.address}</small>
+                        <div style="margin-top:3px;">
+                            <input type="text" value="${data.note}" placeholder="現場メモ..." onchange="saveNote('${data.id}', this.value)" style="width:98%; padding:2px 4px; font-size:11px; border:1px solid #ccc; border-radius:3px;">
                         </div>
                     </div>
                 </div>
-                <div style="text-align:right; display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+                <div style="text-align:right; display:flex; flex-direction:column; gap:3px; align-items:flex-end;">
                     <span class="status-badge ${isDone ? 'status-done' : 'status-un'}">${data.status}</span>
-                    <div style="display:flex; gap:4px; margin-top:2px;">
-                        <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')" style="padding:2px 6px; font-size:11px;">切替</button>
-                        <a href="${navUrl}" target="_blank" class="btn-nav" style="padding:2px 6px; font-size:11px;">ナビ</a>
+                    <div style="display:flex; gap:3px; margin-top:2px;">
+                        <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')">切替</button>
+                        <a href="${navUrl}" target="_blank" class="btn-nav">ナビ</a>
                     </div>
                 </div>
             `;
             locationList.appendChild(item);
         }
 
-        // フルテーブル（一覧リスト専用タブ）
+        // フルテーブル（一覧リスト専用タブ）の行整形
         if (tableBody) {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td><input type="checkbox" class="nav-checkbox" value="${data.id}"></td>
-                <td>${data.posterNum}</td>
-                <td>${data.voteDistrict}</td>
-                <td>${data.name}</td>
-                <td>${data.address}</td>
-                <td><span class="status-badge ${isDone ? 'status-done' : 'status-un'}">${data.status}</span></td>
-                <td>
-                    <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')" style="margin-bottom:2px;">切替</button>
-                    <a href="${navUrl}" target="_blank" class="btn-nav" style="padding:2px 6px; font-size:11px;">ナビ</a>
+                <td class="col-select"><input type="checkbox" class="nav-checkbox" value="${data.id}"></td>
+                <td class="col-status"><span class="status-badge ${isDone ? 'status-done' : 'status-un'}">${data.status}</span></td>
+                <td class="col-no">${data.posterNum}</td>
+                <td class="col-district">${shortDistrict}</td>
+                <td class="col-name">${data.name}</td>
+                <td class="col-address" title="${data.address}">${data.address}</td>
+                <td class="col-action">
+                    <div class="btn-action-group">
+                        <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')">切替</button>
+                        <a href="${navUrl}" target="_blank" class="btn-nav">ナビ</a>
+                    </div>
                 </td>
-                <td>
-                    <input type="text" value="${data.note}" placeholder="メモ..." onchange="saveNote('${data.id}', this.value)" style="width:100%; min-width:110px; padding:3px; font-size:12px; border:1px solid #ccc; border-radius:3px;">
+                <td class="col-note">
+                    <input type="text" value="${data.note}" placeholder="メモ..." onchange="saveNote('${data.id}', this.value)" style="width:90px; padding:2px; font-size:11px; border:1px solid #ccc; border-radius:3px;">
                 </td>
             `;
             tableBody.appendChild(tr);
@@ -272,15 +269,15 @@ function updateMarkerPopup(marker, id, status) {
     const isDone = (status === '済' || status === '完了' || status === '掲示済');
     const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${data.coords[0]},${data.coords[1]}`;
     const content = `
-        <div style="font-size:14px; min-width:180px;">
+        <div style="font-size:13px; min-width:170px;">
             <b>[${data.voteDistrict}] No.${data.posterNum} ${data.name}</b><br>
             <small>${data.address}</small><br>
-            <div style="margin-top:8px;">
-                <button onclick="toggleStatus('${id}')" style="padding:4px 8px;">${isDone ? '未に戻す' : '完了にする'}</button>
-                <a href="${navUrl}" target="_blank" class="btn-nav" style="margin-left:5px;">ナビ</a>
+            <div style="margin-top:6px; display:flex; gap:4px; align-items:center;">
+                <button onclick="toggleStatus('${id}')" style="padding:3px 6px; font-size:11px;">${isDone ? '未に戻す' : '完了にする'}</button>
+                <a href="${navUrl}" target="_blank" class="btn-nav">ナビ</a>
             </div>
             <div style="margin-top:6px;">
-                <input type="text" value="${data.note}" placeholder="現場メモ..." onchange="saveNote('${id}', this.value)" style="width:90%; padding:3px 4px; font-size:12px;">
+                <input type="text" value="${data.note}" placeholder="現場メモ..." onchange="saveNote('${id}', this.value)" style="width:90%; padding:2px 4px; font-size:11px;">
             </div>
         </div>
     `;
