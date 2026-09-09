@@ -81,7 +81,6 @@ function generateDistrictCheckboxes() {
     let html = `<label style="font-weight:bold;"><input type="checkbox" id="toggle-all-districts" checked onchange="toggleAllDistricts(this.checked)"> 全選択</label>`;
     
     districts.forEach(d => {
-        // ラベル表示は「第2投票区」→「第2」に簡略化して省スペース化
         const shortLabel = d.replace('投票区', '');
         html += `<label><input type="checkbox" class="district-filter" value="${d}" checked onchange="onDistrictChange()"> ${shortLabel}</label>`;
     });
@@ -205,7 +204,7 @@ function renderUI(filteredList) {
         if (isDone) doneCount++;
 
         const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${data.coords[0]},${data.coords[1]}`;
-        const shortDistrict = data.voteDistrict.replace('投票区', ''); // 明細用の「第2」表記
+        const shortDistrict = data.voteDistrict.replace('投票区', '');
 
         // マップ下の簡易リスト
         if (locationList) {
@@ -233,7 +232,7 @@ function renderUI(filteredList) {
             locationList.appendChild(item);
         }
 
-        // フルテーブル（一覧リスト専用タブ）の行整形
+        // フルテーブル（一覧リスト専用タブ）
         if (tableBody) {
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -242,7 +241,7 @@ function renderUI(filteredList) {
                 <td class="col-no">${data.posterNum}</td>
                 <td class="col-district">${shortDistrict}</td>
                 <td class="col-name">${data.name}</td>
-                <td class="col-address" title="${data.address}">${data.address}</td>
+                <td class="col-address"><div class="address-text" title="${data.address}">${data.address}</div></td>
                 <td class="col-action">
                     <div class="btn-action-group">
                         <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')">切替</button>
@@ -250,7 +249,7 @@ function renderUI(filteredList) {
                     </div>
                 </td>
                 <td class="col-note">
-                    <input type="text" value="${data.note}" placeholder="メモ..." onchange="saveNote('${data.id}', this.value)" style="width:90px; padding:2px; font-size:11px; border:1px solid #ccc; border-radius:3px;">
+                    <textarea class="note-textarea" placeholder="メモ..." onchange="saveNote('${data.id}', this.value)">${data.note}</textarea>
                 </td>
             `;
             tableBody.appendChild(tr);
