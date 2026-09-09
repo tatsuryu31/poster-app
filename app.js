@@ -241,7 +241,7 @@ function renderUI(filteredList) {
                 <td class="col-no">${data.posterNum}</td>
                 <td class="col-district">${shortDistrict}</td>
                 <td class="col-name">${data.name}</td>
-                <td class="col-address"><div class="address-text" title="${data.address}">${data.address}</div></td>
+                <td class="col-address" title="${data.address}">${data.address}</td>
                 <td class="col-action">
                     <div class="btn-action-group">
                         <button class="btn btn-secondary" onclick="toggleStatus('${data.id}')">切替</button>
